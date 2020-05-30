@@ -123,6 +123,64 @@ public final class CallTest {
   }
 
   @Test
+  public void http202Sync() throws IOException {
+    Retrofit retrofit =
+        new Retrofit.Builder()
+            .baseUrl(server.url("/"))
+            .addConverterFactory(new ToStringConverterFactory())
+            .build();
+    Service example = retrofit.create(Service.class);
+
+    server.enqueue(new MockResponse().setResponseCode(202).setBody(""));
+    server.enqueue(new MockResponse().setResponseCode(200).setBody("Finish"));
+
+    Response<String> response = example.getString().execute();
+    assertThat(response.isSuccessful()).isTrue();
+    assertThat(response.code()).isEqualTo(202);
+    assertThat(response.body()).isEqualTo("");
+    response = example.getString().execute();
+    assertThat(response.isSuccessful()).isTrue();
+    assertThat(response.code()).isEqualTo(200);
+    assertThat(response.body()).isEqualTo("Finish");
+  }
+
+  @Test
+  public void http202Async() throws InterruptedException, IOException {
+    Retrofit retrofit =
+        new Retrofit.Builder()
+            .baseUrl(server.url("/"))
+            .addConverterFactory(new ToStringConverterFactory())
+            .build();
+    Service example = retrofit.create(Service.class);
+    final AtomicReference<Response<String>> responseRef = new AtomicReference<>();
+    final CountDownLatch latch = new CountDownLatch(1);
+    Response<String> response;
+
+    server.enqueue(new MockResponse().setResponseCode(202).setBody(""));
+    example
+        .getString()
+        .enqueue(
+            new Callback<String>() {
+              @Override
+              public void onResponse(Call<String> call, Response<String> response) {
+                responseRef.set(response);
+                latch.countDown();
+              }
+
+              @Override
+              public void onFailure(Call<String> call, Throwable t) {
+                t.printStackTrace();
+              }
+            });
+    assertTrue(latch.await(10, SECONDS));
+
+    response = responseRef.get();
+    assertThat(response.isSuccessful()).isTrue();
+    assertThat(response.code()).isEqualTo(202);
+    assertThat(response.body()).isEqualTo("");
+  }
+
+  @Test
   public void http404Sync() throws IOException {
     Retrofit retrofit =
         new Retrofit.Builder()
